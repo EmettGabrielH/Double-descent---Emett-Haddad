@@ -1,10 +1,10 @@
 from numpy import linalg, linspace , random
-from numpy import ones, outer, array,diag, dot, vectorize
+from numpy import ones, outer, array,diag, dot, vectorize, eye, concatenate,zeros
 from numpy import exp,cos, sqrt,log
 
 from decimal import Decimal,getcontext
 
-from matplotlib.pyplot import pause, show, plot, scatter, axes, xlabel,ylabel,clf, legend,subplot
+from matplotlib.pyplot import pause, show, plot, scatter, axes, xlabel,ylabel,clf, legend,subplot, savefig
 from sys import stdout
 
 from itertools import product
@@ -12,25 +12,28 @@ from sklearn.metrics import mean_squared_error
 from sklearn.model_selection import train_test_split
 
 
-#On fixe les calculs sur la classe Decimal avec 100 chiffres
+#On fixe les calculs sur la classe Decimal avec 100 chiffres, afin de pouvoir orthonormaliser un grand nombre de polynomes
 getcontext().prec = 100
+#On fixe une erreur qui permet d'annuler les coefficients trops faibles
+erreur_calcul = 10**(-30)
 
 # Classe de polynomes a D variables
 class Polynomial:
     def __init__(self,dimension, coefficients):
         self.dimension = dimension
-        self.coefficients = coefficients  # coefficients est un dictionnaire {(degré_X1, degré_X2,..., degré_Xd): coefficient}
+        self.coefficients = coefficients  # coefficients est un dictionnaire {(degré_X1, degré_X2,..., degré_XD): coefficient}
 
     def update(self):
         L_a_supprimer = []
         for degrees, coeff in self.coefficients.items():
-            if abs(coeff) < 10**(-30):
+            if abs(coeff) < erreur_calcul:
                 L_a_supprimer.append(degrees)
         for d in L_a_supprimer:
             del self.coefficients[d]
         
         if len(self.coefficients) == 0:
             self.coefficients[tuple([0]*self.dimension)] = Decimal(0)
+            
     def copy(self):
         return Polynomial(self.dimension, self.coefficients.copy())
     def __repr__(self):
@@ -143,16 +146,16 @@ def produit_scalaire(C,P,Q):
     return (P*Q).integrer_polynome(C)
 def norme(C,P):
     return Decimal(sqrt((P*P).integrer_polynome(C)))
-def orthonormaliser_Base(B,C):
-    nB = []
-    for e in B:
-        ne = e.copy()
-        for nb in nB:
-            ne = ne - produit_scalaire(C,nb,ne)*nb
-        ne = (1/norme(C,ne))*ne
+def orthonormaliser_Base(Base,C):
+    Base_orthonormee = []
+    for polynome_cano in Base:
+        n_polynome_ortho = polynome_cano.copy()
+        for polynome_ortho in Base_orthonormee:
+            n_polynome_ortho = n_polynome_ortho - produit_scalaire(C,polynome_ortho,n_polynome_ortho)*polynome_ortho
+        n_polynome_ortho = (1/norme(C,n_polynome_ortho))*n_polynome_ortho
         
-        nB.append(ne)
-    return nB
+        Base_orthonormee.append(n_polynome_ortho)
+    return Base_orthonormee
         
 def Decimal_to_float_Base(Base):
     nBase = []
@@ -164,100 +167,108 @@ def Decimal_to_float_Base(Base):
         nBase.append(nP)
     return nBase
 
-
-f = lambda X: exp(2 - (X[0]**2 + X[1]**2 ))
-M = 70
-n = 40
-degree = 12
-ratio = 0.2
-C = [[-1,1],[-1,1]]
-
-
-D = len(C)
-stdout.write("Base \n")
-Base_orthonormale = Decimal_to_float_Base(orthonormaliser_Base(generer_base(D,degree),C))
-stdout.write("Base orthonormale de cardinal :" + str(len(Base_orthonormale))+"\n")
-
-#Création du dataset, avec seed fixée pour reproductabilité
-random.seed(23334)
-U = random.uniform(0,1,size = (M,D))
-X = ones((M,D))@diag([C[d][0] for d in range(D)])+U@diag([C[d][1]-C[d][0] for d in range(D)])
-
-Y = list(map(f,X))
-X_train, X_test, Y_train, Y_test = train_test_split( X, Y, test_size=ratio, random_state=42)
-N = len(X_train)
-print("M: " + str(M) + "| N:" + str(N))
-
-# Maillage pour le calcul de l'erreur globale et pour la visualisation
-x = array(list(product(linspace(C[0][0],C[0][1],n),repeat = D)))
-if D == 2:
-    u1 = linspace(C[0][0],C[0][1],n)
-    u = outer(linspace(C[0][0], C[0][1], n), ones(n))
-
-P_min, P_max = 1, len(Base_orthonormale)
-erreur_train, erreur_test,erreur_global,norme_beta  = [], [], [], []
-
-liste_P = []
-Y_global = list(map(f,x))
-
-def Phi(Base_orthonormale,P,t):
-    return array([Base_orthonormale[j](t) for j in range(P)])
-
-for P in range(P_min, P_max):
-    liste_P.append(P/N)
-    stdout.write("P: "+ str(P) + " P/N: "+ str(P/N) + "\n")
-
-    Z = array([Phi(Base_orthonormale,P,X_train[i]) for i in range(N)])
-    beta_chap = linalg.pinv(Z)@Y_train
-    Y_chap = Z@beta_chap
-    y_chap =  lambda t: dot(Phi(Base_orthonormale,P,t), beta_chap)
-
-    erreur_train.append(log(1+mean_squared_error(Y_train,Y_chap)))
-    norme_beta.append(log(1+sum(beta_chap**2)))
-    erreur_test.append(log(1+mean_squared_error(Y_test, list(map(y_chap,X_test)))))
-    erreur_global.append(log(1+mean_squared_error(Y_global, list(map(y_chap,x)))))
-
-    stdout.write("Erreur train: "+ str(erreur_train[-1])+ "\n")
-    stdout.write("Norme de beta: " + str(norme_beta[-1])+ "\n")
-    stdout.write("Erreur test: " + str(erreur_test[-1])+ "\n")
-    stdout.write("Erreur global: " + str(erreur_global[-1])+ "\n")
+def Phi(Base,P,t):
+    return array([Base[j](t) for j in range(P)])
     
-    if  P > N:
-        stdout.write("Minimum sous-paramétré: "+ str(min(erreur_test[:N-P_min])) + "| Minimum sur-paramétré: " + str(min(erreur_test[N-P_min:]))+"\n")
-    else:
-        stdout.write("Minimum sous-paramétré: "+ str(min(erreur_test)) + "\n")
+def main(n, M, D, Lambda,C, y ,Features, ratio,Random_seed):
 
-        
-    subplot(2,1,1)
+    #Dataset creation, with seed set for reproducibility
+    random.seed(Random_seed)
+    U = random.uniform(0,1,size = (M,D))
+    X = ones((M,D))@diag([C[d][0] for d in range(D)])+U@diag([C[d][1]-C[d][0] for d in range(D)])
+
+    Y = list(map(y,X))
+    X_train, X_test, Y_train, Y_test = train_test_split( X, Y, test_size=ratio, random_state=42)
+    N = len(X_train)
+    stdout.write("M: " + str(M) + "| N:" + str(N)+"\n")
+
+    # Uniform mesh for global error calculation and visualization, only works for cubes in dimension 2
+    x = array(list(product(linspace(C[0][0],C[0][1],n),repeat = D)))
     if D == 2:
-        # Visualisation des graphes en 2D
-        Y_visualisation = array([[f((u1[i],u1[j])) for i in range(n)] for j in range(n)])
-        Y_visualisation_approx = array([[y_chap((u1[i],u1[j])) for i in range(n)] for j in range(n)])
+        u1 = linspace(C[0][0],C[0][1],n)
+        u = outer(linspace(C[0][0], C[0][1], n), ones(n))
+
+    P_min, P_max = 1, len(Features)
+    Train_error, Test_error,Global_error,Beta_norm  = [], [], [], []
+    liste_P = []
+    Y_global = list(map(y,x))
+
+    for P in range(P_min, P_max):
+        liste_P.append(P/N)
+        stdout.write("P: "+ str(P) + " P/N: "+ str(P/N) + "\n")
+
+        Z = array([Phi(Features,P,X_train[i]) for i in range(N)])
+        
+        if Lambda == 0:
+            beta_chap = linalg.pinv(Z)@Y_train
+        else:
+            W = concatenate((Z,sqrt(Lambda*N)*eye(P)), axis = 0)
+            beta_chap = linalg.pinv(W)@concatenate((Y_train,zeros(P,)), axis = 0)
+        Y_chap = Z@beta_chap
+        y_chap =  lambda t: dot(Phi(Features,P,t), beta_chap)
+
+        Train_error.append(log(1+mean_squared_error(Y_train,Y_chap)))
+        Beta_norm.append(log(1+sum(beta_chap**2)))
+        Test_error.append(log(1+mean_squared_error(Y_test, list(map(y_chap,X_test)))))
+        Global_error.append(log(1+mean_squared_error(Y_global, list(map(y_chap,x)))))
+
+        stdout.write("Train_error: "+ str(Train_error[-1])+ "\n")
+        stdout.write("Beta_norm: " + str(Beta_norm[-1])+ "\n")
+        stdout.write("Test_error: " + str(Test_error[-1])+ "\n")
+        stdout.write("Global_error: " + str(Global_error[-1])+ "\n")
+        
+        if  P > N:
+            stdout.write("Under-parameterised minimum test: "+ str(min(Test_error[:N-P_min])) + "| Over-parameterised minimum test: " + str(min(Test_error[N-P_min:]))+"\n")
+
+    
+    if D == 2:
+        # visualization des graphes en 2D
+        Y_visualization = array([[y((u1[i],u1[j])) for i in range(n)] for j in range(n)])
+        Y_visualization_approx = array([[y_chap((u1[i],u1[j])) for i in range(n)] for j in range(n)])
         
         ax = axes(projection='3d')
-        ax.set_title('Graphe 3d des fonctions: approximation en rouge')
-        ax.plot_surface(u,u.T,Y_visualisation , cmap='viridis',edgecolor='green')
-        ax.plot_surface(u,u.T,Y_visualisation_approx , cmap='viridis',edgecolor='red')
+        ax.set_title('Estimator: red and target: green,  lambda ='+ str(Lambda))
+        ax.plot_surface(u,u.T,Y_visualization , cmap='viridis',edgecolor='green')
+        ax.plot_surface(u,u.T,Y_visualization_approx , cmap='viridis',edgecolor='red')
         
 
     if D == 1:
-        # Visualisation des graphes en 1D
+        # visualization des graphes en 1D
         plot(x,list(map(y_chap,x)))
         plot(x,Y_global)
         scatter(X, Y)
-        legend(["Approximation", "Fonction a approximer"])
-
+        legend(["Estimator", "Target"])
+        
+    savefig('Function_plot.png')
     # Affichage des courbes d'erreurs
-    subplot(2,1,2)
-    plot(liste_P, norme_beta)
-    plot(liste_P, erreur_train)
-    plot(liste_P, erreur_test)
-    plot(liste_P,erreur_global)
-    xlabel("Rapport P/N ou P:nb parametres, N: nb de points")
-    ylabel("log(1+MSE)")
-    legend(["Norme beta", "Erreur train", "Erreur test","Erreur global"])
-
-
-    pause(0.1)
+    
     clf()
+    
+    plot(liste_P, Beta_norm)
+    plot(liste_P, Train_error)
+    plot(liste_P, Test_error)
+    plot(liste_P,Global_error)
+    xlabel("P/N ratio with P:nb parameters, N: nb points")
+    ylabel("log(1+MSE)")
+    legend(["Beta_norm", "Train_error", "Test_error","Global_error"])
+    
+    savefig('Graph_error.png')
 
+a, n_example, type_polynome, D, Deg,r = 1, 1, 2, 2,9,0.2 
+
+
+if n_example == 1:
+    y = lambda X: 2*exp(D - sum([X[i]**2 for i in range(D)]))
+if n_example == 2:
+    y = lambda X: sum([3*cos(40*X[i]) + cos(10*X[i])  - X[i]**2 for i in range(D)])
+     
+
+if type_polynome == 2:
+    stdout.write("Orthonormalized basis\n")
+    Features = Decimal_to_float_Base(orthonormaliser_Base(generer_base(D,Deg),array([[Decimal(-a),Decimal(a)] for _ in range(D)])))
+if type_polynome == 1:
+    stdout.write("Canonical basis\n")
+    Features = Decimal_to_float_Base(generer_base(D,Deg))
+    
+C = array([[-a,a] for _ in range(D)])
+main(50,20, D, 0,C, y, Features, 0.2)
