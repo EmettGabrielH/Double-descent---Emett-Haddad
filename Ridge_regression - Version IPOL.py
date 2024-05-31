@@ -209,8 +209,8 @@ def ridge_regression(P_min, P_max,Features,Lambda,Data,Data_global):
         stdout.write("P: "+ str(P) + " P/N: "+ str(P/N) + "\n")
 
         Z_P = array([Phi(Features,P,x_train) for x_train in X_train])
-        Z_P_test = array([Phi(Features,P,x_test) for x_test in X_test])
-        Z_P_global = array([Phi(Features,P,x_global) for x_global in X_global])
+        #Z_P_test = array([Phi(Features,P,x_test) for x_test in X_test])
+        #Z_P_global = array([Phi(Features,P,x_global) for x_global in X_global])
         
         if Lambda == 0:
             beta_chap_P = linalg.pinv(Z_P)@Y_train
@@ -218,10 +218,17 @@ def ridge_regression(P_min, P_max,Features,Lambda,Data,Data_global):
             W_P = concatenate((Z_P,sqrt(Lambda*N)*eye(P)), axis = 0)
             beta_chap_P = linalg.pinv(W_P)@concatenate((Y_train,zeros(P,)), axis = 0)
             
+        y_chap_P =  lambda t: dot(Phi(Features,P,t), beta_chap_P)
         
-        Train_error.append(log(1+mean_squared_error(Y_train,Z_P@beta_chap_P)))
-        Test_error.append(log(1+mean_squared_error(Y_test, Z_P_test@beta_chap_P)))
-        Global_error.append(log(1+mean_squared_error(Y_global, Z_P_global@beta_chap_P)))
+        #Train_error.append(log(1+mean_squared_error(Y_train,Z_P@beta_chap_P)))
+        #Test_error.append(log(1+mean_squared_error(Y_test, Z_P_test@beta_chap_P)))
+        #Global_error.append(log(1+mean_squared_error(Y_global, Z_P_global@beta_chap_P)))
+
+
+        Train_error.append(log(1+mean_squared_error(Y_train, list(map(y_chap_P,X_train)))))
+        Test_error.append(log(1+mean_squared_error(Y_test, list(map(y_chap_P,X_test)))))
+        Global_error.append(log(1+mean_squared_error(Y_global, list(map(y_chap_P,X_global)))))
+        
         Beta_norm.append(log(1+sum(beta_chap_P**2)))
 
         stdout.write("Train_error: "+ str(Train_error[-1])+ "| Test_error: " + str(Test_error[-1])+"| Global_error: " + str(Global_error[-1])+"\n")
@@ -230,8 +237,8 @@ def ridge_regression(P_min, P_max,Features,Lambda,Data,Data_global):
         if  P > N:
             stdout.write("Under-parameterised minimum test: "+ str(min(Test_error[:N-P_min])) + "| Over-parameterised minimum test: " + str(min(Test_error[N-P_min:]))+"\n")
             
-    y_chap =  lambda t: dot(Phi(Features,P,t), beta_chap_P)
-    return Train_error, Test_error, Beta_norm, Global_error, y_chap
+    
+    return Train_error, Test_error, Beta_norm, Global_error, y_chap_P
     
 def main(n, M, D, Lambda,C, y ,Features, ratio_data,Random_seed):
     
@@ -266,6 +273,9 @@ def main(n, M, D, Lambda,C, y ,Features, ratio_data,Random_seed):
         ax.set_title('Estimator: red and target: green,  lambda ='+ str(Lambda))
         ax.plot_surface(u,u.T,Y_visualization , cmap='viridis',edgecolor='green')
         ax.plot_surface(u,u.T,Y_visualization_approx , cmap='viridis',edgecolor='red')
+        ax.set_xlabel('X')
+        ax.set_ylabel('Y')
+        ax.set_zlabel('Z')
         
 
     if D == 1:
@@ -292,9 +302,13 @@ def main(n, M, D, Lambda,C, y ,Features, ratio_data,Random_seed):
     savefig('Graph_error.png')
     
 #"""
-a, n_example, type_polynome, D, Deg,r = 1, 1, 2, 2,9,0.2 
-n = 50
-M = 50
+a, n_example, type_polynome = 1, 1, 2
+D, Deg= 2,12
+
+n = 30
+M = 30
+r = 0.2
+
 if n_example == 1:
     y = lambda X: 2*exp(D - sum([X[i]**2 for i in range(D)]))
 if n_example == 2:
@@ -337,7 +351,7 @@ if __name__ == "__main__":
     
     if args.type_polynome == 2:
         stdout.write("Orthonormalized basis\n")
-        Features = generate_orthonormal_basis(args.D,Deg,array([[Decimal(-args.a),Decimal(args.a)] for _ in range(args.D)]))
+        Features = generate_orthonormal_basis(args.D,args.Deg,array([[Decimal(-args.a),Decimal(args.a)] for _ in range(args.D)]))
     if args.type_polynome == 1:
         stdout.write("Canonical basis\n")
         Features = generate_canonical_basis(args.D,args.Deg)
