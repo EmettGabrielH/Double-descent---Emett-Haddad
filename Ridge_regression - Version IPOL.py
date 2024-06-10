@@ -4,7 +4,7 @@ from numpy import exp,cos, sqrt,log
 
 from decimal import Decimal,getcontext
 
-from matplotlib.pyplot import pause, show, plot, scatter, axes, xlabel,ylabel,clf, legend,subplot, savefig
+from matplotlib.pyplot import plot, scatter, axes, xlabel,ylabel,clf, legend,subplot, savefig,title
 from sys import stdout
 
 from itertools import product
@@ -270,40 +270,46 @@ def main(n, M, D, Lambda,C, y ,Features, ratio_data,Random_seed):
         Y_visualization_approx = array([[y_chap((u1[i],u1[j])) for i in range(n)] for j in range(n)])
         
         ax = axes(projection='3d')
-        ax.set_title('Estimator: red and target: green,  lambda ='+ str(Lambda))
-        ax.plot_surface(u,u.T,Y_visualization , cmap='viridis',edgecolor='green')
-        ax.plot_surface(u,u.T,Y_visualization_approx , cmap='viridis',edgecolor='red')
+        ax.set_title('Function plot,  lambda ='+ str(Lambda))
+        ax.plot_surface(u,u.T,Y_visualization , cmap='viridis',edgecolor='green', label = "Target")
+        ax.plot_surface(u,u.T,Y_visualization_approx , cmap='viridis',edgecolor='red', label = "Estimator")
         ax.set_xlabel('X')
         ax.set_ylabel('Y')
         ax.set_zlabel('Z')
+        ax.legend()
         
 
     if D == 1:
         # 1D graph visualization
-        plot(X_global,list(map(y_chap,X_global)))
-        plot(X_global,Y_global)
-        scatter(Data[0], Data[2])
-        legend(["Estimator", "Target"])
+        plot(X_global,list(map(y_chap,X_global)), label="Estimator")
+        plot(X_global,Y_global, label = "Target")
+        scatter(Data[0], Data[2], label = "Interpolation points")
+        scatter(Data[1], Data[3], label = "Test points")
+        xlabel("x")
+        ylabel("y")
+        title("Functions plot")
+        legend()
         
-    savefig('Function_plot.png')
+    savefig('Function_plot_ridge.png')
     # Display of error curves
     
     clf()
 
     liste_P = [P/N for P in range(P_min,P_max)]
-    plot(liste_P, Beta_norm)
-    plot(liste_P, Train_error)
-    plot(liste_P, Test_error)
-    plot(liste_P,Global_error)
+    plot(liste_P, Beta_norm, label = "Beta_norm")
+    plot(liste_P, Train_error, label="Train_error")
+    plot(liste_P, Test_error, label="Test_error")
+    plot(liste_P,Global_error, label="Global_error")
     xlabel("P/N ratio with P:nb parameters, N: nb points")
     ylabel("log(1+MSE)")
-    legend(["Beta_norm", "Train_error", "Test_error","Global_error"])
+    title("Errors plot")
+    legend()
     
-    savefig('Graph_error.png')
+    savefig('Graph_error_ridge.png')
     
 #"""
-a, n_example, type_polynome = 1, 1, 2
-D, Deg= 2,12
+a, n_example, type_polynome = 1, 2, 2
+D, Deg= 2,9
 
 n = 30
 M = 30
@@ -342,20 +348,22 @@ if __name__ == "__main__":
 
     C = array([[-args.a,args.a] for _ in range(args.D)])
     
-    
-    if args.n_example == 1:
-        y = lambda X: 2*exp(args.D - sum([X[i]**2 for i in range(args.D)]))
-    if args.n_example == 2:
-        y = lambda X: sum([3*cos(40*X[i]) + cos(10*X[i])  - X[i]**2 for i in range(args.D)])
-         
-    
-    if args.type_polynome == 2:
-        stdout.write("Orthonormalized basis\n")
-        Features = generate_orthonormal_basis(args.D,args.Deg,array([[Decimal(-args.a),Decimal(args.a)] for _ in range(args.D)]))
-    if args.type_polynome == 1:
-        stdout.write("Canonical basis\n")
-        Features = generate_canonical_basis(args.D,args.Deg)
+    if (args.D == 1 and (args.n > 100 or args.Deg > 50)) or (args.D == 2 and (args.n > 30 or args.Deg > 14)) or (args.D == 3 and (args.n > 10 or args.Deg > 6)):
+        stdout.write("Incorrect inputs, please check the size of the inputs D and the fineness of the display mesh n.")
+    else:
+        if args.n_example == 1:
+            y = lambda X: 2*exp(args.D - sum([X[i]**2 for i in range(args.D)]))
+        if args.n_example == 2:
+            y = lambda X: sum([3*cos(40*X[i]) + cos(10*X[i])  - X[i]**2 for i in range(args.D)])
+             
         
-    
-    main(args.n,args.M, args.D, args.Lambda,C, y, Features, args.r, args.Random_seed)
+        if args.type_polynome == 2:
+            stdout.write("Orthonormalized basis\n")
+            Features = generate_orthonormal_basis(args.D,args.Deg,array([[Decimal(-args.a),Decimal(args.a)] for _ in range(args.D)]))
+        if args.type_polynome == 1:
+            stdout.write("Canonical basis\n")
+            Features = generate_canonical_basis(args.D,args.Deg)
+            
+        
+        main(args.n,args.M, args.D, args.Lambda,C, y, Features, args.r, args.Random_seed)
 """
